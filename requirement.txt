@@ -15,3 +15,4 @@ wandb
 scikit-learn
 ordered_set
 rich
+pygam
