@@ -3,6 +3,25 @@ import pickle
 from .base import BenchPred, set_random_seed
 
 
+class _SortSearchPredictor:
+    def __init__(self, coreset_idx, n_samples):
+        self.coreset_idx = coreset_idx
+        self.n_samples = n_samples
+
+    def predict(self, X):
+        X = np.asarray(X, dtype=np.float32)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        agg = np.zeros(X.shape[0], dtype=np.float32)
+        for i in range(X.shape[0]):
+            pred = X[i].copy()
+            pred[pred == 0] = -1
+            cumsum = np.cumsum(pred)
+            idx = np.argmax(cumsum)
+            agg[i] = float(self.coreset_idx[idx]) / float(self.n_samples)
+        return agg
+
+
 class SortAndSearch(BenchPred):
     """
     Sort & Search (S&S) Efficient Lifelong Model Evaluation
@@ -73,6 +92,9 @@ class SortAndSearch(BenchPred):
         if single_input:
             return agg_accuracies[0]
         return agg_accuracies
+
+    def refit_regressor(self, source_full_scores):
+        return _SortSearchPredictor(self.coreset_idx, self.n_samples)
 
     def save(self, path_save):
         with open(path_save, "wb") as f:

@@ -4,6 +4,33 @@ from sklearn.linear_model import Ridge
 from .base import BenchPred, set_random_seed
 
 
+class _AIPWPredictor:
+    def __init__(self, ref_scores, coreset_idx, rest_indices):
+        self.ref_scores = ref_scores
+        self.coreset_idx = coreset_idx
+        self.rest_indices = rest_indices
+
+    def predict(self, X):
+        X = np.asarray(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        ret = []
+        for i in range(X.shape[0]):
+            x_train = self.ref_scores[:, self.coreset_idx].T
+            y_train = X[i]
+            x_test = self.ref_scores[:, self.rest_indices].T
+            rgs = Ridge(alpha=10)
+            rgs.fit(x_train, y_train.reshape(-1, 1))
+            y_pred_train = rgs.predict(x_train).squeeze()
+            y_pred_test = rgs.predict(x_test).squeeze()
+            n = len(self.coreset_idx)
+            N = len(self.rest_indices)
+            ppi_part = (y_train - y_pred_train).mean() / (1 + n / N)
+            ppi_part += y_pred_test.mean()
+            ret.append(ppi_part)
+        return np.array(ret)
+
+
 class AIPWPred(BenchPred):
     def __init__(self):
         super().__init__()
@@ -59,6 +86,15 @@ class AIPWPred(BenchPred):
             ret.append(ppi_part)
 
         return np.array(ret)
+
+    def refit_regressor(self, source_full_scores):
+        coreset_idx = self.get_coreset()
+        ref_scores = source_full_scores.copy()
+        num_data = ref_scores.shape[1]
+        rest_indices = np.array(
+            [i for i in range(num_data) if i not in coreset_idx]
+        )
+        return _AIPWPredictor(ref_scores, coreset_idx, rest_indices)
 
     def save(self, path_save):
         jbl.dump((self.compressed_data_indices, self.source_full_scores), path_save)

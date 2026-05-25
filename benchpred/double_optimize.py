@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import joblib as jbl
 
-from .base import BenchPred, set_random_seed
+from .base import BenchPred, set_random_seed, _WeightedSumPredictor
 
 
 class DoubleOptimizePred(BenchPred):
@@ -70,13 +70,7 @@ class DoubleOptimizePred(BenchPred):
         return lambda_star
 
     def fit(
-        self,
-        source_full_scores,
-        coreset_size,
-        seed=42,
-        verbose=False,
-        *args,
-        **kwargs
+        self, source_full_scores, coreset_size, seed=42, verbose=False, *args, **kwargs
     ):
         num_model = source_full_scores.shape[0]
         num_data = source_full_scores.shape[1]
@@ -88,13 +82,12 @@ class DoubleOptimizePred(BenchPred):
 
         set_random_seed(seed)
 
-        source_full_scores = torch.tensor(source_full_scores)
+        # Convert boolean scores to float (True->1.0, False->0.0)
+        source_full_scores = torch.tensor(source_full_scores, dtype=torch.float32)
         p = torch.nn.Parameter(torch.ones(num_data, requires_grad=True))
         w = torch.nn.Parameter(torch.randn(num_data, requires_grad=True))
         with torch.no_grad():
-            lambda_star = self.get_simplex_projection_lambda(
-                p.data, coreset_size
-            )
+            lambda_star = self.get_simplex_projection_lambda(p.data, coreset_size)
             p.data = torch.clamp(p.data - lambda_star, min=0.0, max=1.0)
         optimizer_w = torch.optim.Adam([w], lr=0.1, weight_decay=1e-4)
         optimizer_p = torch.optim.Adam([p], lr=0.001, weight_decay=1e-4)
@@ -107,9 +100,7 @@ class DoubleOptimizePred(BenchPred):
         no_improvement, max_no_improvement = 0, 100
         for step in range(1000):
             sampled_indices = self.sample(p, coreset_size, "hard")
-            pred = (source_full_scores * sampled_indices * w).sum(
-                1
-            ) / coreset_size
+            pred = (source_full_scores * sampled_indices * w).sum(1) / coreset_size
             loss_tr = torch.nn.functional.mse_loss(
                 pred[train_models], source_full_scores[train_models].mean(1)
             )
@@ -141,14 +132,10 @@ class DoubleOptimizePred(BenchPred):
             optimizer_p.step()
 
             with torch.no_grad():
-                lambda_star = self.get_simplex_projection_lambda(
-                    p.data, coreset_size
-                )
+                lambda_star = self.get_simplex_projection_lambda(p.data, coreset_size)
                 p.data = torch.clamp(p.data - lambda_star, min=0.0, max=1.0)
 
-        sampled_indices = (
-            self.sample(best_p, coreset_size, "hard").detach().cpu()
-        )
+        sampled_indices = self.sample(best_p, coreset_size, "hard").detach().cpu()
 
         self.compressed_data_indices = torch.where(sampled_indices)[0].numpy()
         self.w = best_w.detach().cpu().numpy()[self.compressed_data_indices]
@@ -162,6 +149,9 @@ class DoubleOptimizePred(BenchPred):
             target_coreset_scores = target_coreset_scores.reshape(1, -1)
 
         return (target_coreset_scores * self.w).mean(1)
+
+    def refit_regressor(self, source_full_scores):
+        return _WeightedSumPredictor(self.w / len(self.w))
 
     def save(self, path_save):
         jbl.dump((self.compressed_data_indices, self.w), path_save)

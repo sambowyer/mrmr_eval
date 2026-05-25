@@ -5,6 +5,32 @@ from sklearn.impute import SimpleImputer
 from .base import BenchPred, set_random_seed
 
 
+class _PCAImputePredictor:
+    def __init__(self, ref_scores, coreset_idx, n_comp, max_iter, tol):
+        self.ref_scores = ref_scores
+        self.coreset_idx = coreset_idx
+        self.n_comp = n_comp
+        self.max_iter = max_iter
+        self.tol = tol
+
+    def predict(self, X):
+        X = np.asarray(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        num_data = self.ref_scores.shape[1]
+        n_target = X.shape[0]
+        target_matrix = np.zeros((n_target, num_data), dtype=np.float32)
+        target_matrix[:, self.coreset_idx] = X
+        not_sel = np.array(
+            [i for i in range(num_data) if i not in self.coreset_idx]
+        )
+        target_matrix[:, not_sel] = np.nan
+        masked = np.concatenate([self.ref_scores, target_matrix], axis=0)
+        return PCAPred.pca_impute(
+            masked, self.n_comp, self.max_iter, self.tol,
+        ).mean(1)[-n_target:]
+
+
 class PCAPred(BenchPred):
     def __init__(self):
         super().__init__()
@@ -23,7 +49,7 @@ class PCAPred(BenchPred):
         tol=1e-4,
         seed=42,
         *args,
-        **kwargs
+        **kwargs,
     ):
         num_model = source_full_scores.shape[0]
         num_data = source_full_scores.shape[1]
@@ -38,9 +64,7 @@ class PCAPred(BenchPred):
         self.source_full_scores = source_full_scores
         self.max_iter = max_iter
         self.tol = tol
-        self.compressed_data_indices = np.random.permutation(num_data)[
-            :coreset_size
-        ]
+        self.compressed_data_indices = np.random.permutation(num_data)[:coreset_size]
 
         if n_comp is not None:
             self.n_comp = n_comp
@@ -50,16 +74,25 @@ class PCAPred(BenchPred):
             val_models = order[int(num_model * 0.75) :]
 
             assert num_data > 20
-            assert num_model > 20
+            assert num_model > 3 #10 # 20
 
-            masked_matrix = source_full_scores.copy()
+            # Convert boolean scores to float before setting NaN values
+            masked_matrix = source_full_scores.copy().astype(np.float32)
             not_selected_indices = np.array(
                 [i for i in range(num_data) if i not in self.compressed_data_indices]
             )
             masked_matrix[val_models][:, not_selected_indices] = np.nan
 
             best_n_comp, best_gap = None, 1e9
-            for n_comp in [2, 5, 10, 20]:
+            n_comps = [2, 5, 10, 20]
+            if num_model < 20:
+                n_comps = [2, 5, 10]
+            if num_model < 10:
+                n_comps = [2, 3, 4, 5]
+            if num_model < 5:
+                n_comps = [2, 3, 4] if num_model > 3 else [2, 3]
+
+            for n_comp in n_comps:
                 filled_matrix = self.pca_impute(
                     masked_matrix, n_comp, self.max_iter, self.tol
                 )
@@ -83,7 +116,8 @@ class PCAPred(BenchPred):
         num_data = self.source_full_scores.shape[1]
         num_target_models = target_coreset_scores.shape[0]
 
-        target_matrix = np.zeros((num_target_models, num_data))
+        # Create target matrix as float to handle NaN values
+        target_matrix = np.zeros((num_target_models, num_data), dtype=np.float32)
         target_matrix[:, self.compressed_data_indices] = target_coreset_scores
         not_selected_indices = np.array(
             [i for i in range(num_data) if i not in self.compressed_data_indices]
@@ -96,6 +130,12 @@ class PCAPred(BenchPred):
         return self.pca_impute(
             masked_matrix, self.n_comp, self.max_iter, self.tol
         ).mean(1)[-num_target_models:]
+
+    def refit_regressor(self, source_full_scores):
+        return _PCAImputePredictor(
+            source_full_scores.copy(), self.get_coreset(),
+            self.n_comp, self.max_iter, self.tol,
+        )
 
     def save(self, path_save):
         jbl.dump(

@@ -122,6 +122,23 @@ def compute_fisher_information(params, theta_grid):
     return info
 
 
+class _MetaBenchPredictor:
+    def __init__(self, coreset_params, ability_method, gam):
+        self.coreset_params = coreset_params
+        self.ability_method = ability_method
+        self.gam = gam
+
+    def predict(self, X):
+        X = np.asarray(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        theta_new = estimate_abilities(
+            self.coreset_params, X, method=self.ability_method
+        )
+        Xnew = np.vstack([theta_new, X.mean(axis=1)]).T
+        return self.gam.predict(Xnew)
+
+
 class MetaBench(BenchPred):
     def __init__(self):
         super().__init__()
@@ -203,6 +220,17 @@ class MetaBench(BenchPred):
         )
         Xnew = np.vstack([theta_new, target_coreset_scores.mean(axis=1)]).T
         return self.gam.predict(Xnew)
+
+    def refit_regressor(self, source_full_scores):
+        coreset = self.get_coreset()
+        sub_scores = source_full_scores[:, coreset]
+        theta_co = estimate_abilities(
+            self.coreset_params, sub_scores, method=self.ability_est_method
+        )
+        y = source_full_scores.mean(axis=1)
+        X_train = np.vstack([theta_co, sub_scores.mean(axis=1)]).T
+        gam = LinearGAM(s(0) + s(1), fit_intercept=True).fit(X_train, y)
+        return _MetaBenchPredictor(self.coreset_params, self.ability_est_method, gam)
 
     def save(self, path):
         with open(path, "wb") as f:

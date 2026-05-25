@@ -78,6 +78,14 @@ class LassoPred(BenchPred):
 
         return self.rgs.predict(x)
 
+    def refit_regressor(self, source_full_scores):
+        coreset = self.get_coreset()
+        X = source_full_scores[:, coreset]
+        y = source_full_scores.mean(axis=1)
+        lasso = Lasso(alpha=1e-4, max_iter=10000)
+        lasso.fit(X, y)
+        return lasso
+
     def save(self, path_save):
         jbl.dump((self.compressed_data_indices, self.rgs), path_save)
 

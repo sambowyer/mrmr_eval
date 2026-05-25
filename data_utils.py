@@ -1,3 +1,11 @@
+"""Score-matrix loading utilities for the mrmr_eval tutorial.
+
+Slimmed from the paper repo: supports OpenLLM (binary), HELM (binary) and
+GLUE (binary) score matrices.  Continuous-CAT and pass@k code datasets are
+intentionally out of scope here — see ``_public_paper_repo/mrmr_paper`` for
+the full surface.
+"""
+
 import json
 import os
 from abc import ABC, abstractmethod
@@ -22,23 +30,28 @@ os.makedirs(dir_data_raw, exist_ok=True)
 helm_datasets = [
     "commonsense", "gsm", "legalbench",
     "math", "med_qa", "mmlu",
-    # "narrative_qa", "natural_qa", "wmt_14", # not binary accuracy
+    # "narrative_qa", "natural_qa", "wmt_14",  # not binary accuracy
 ]
 glue_datasets = [
-    # "cola", # not binary accuracy
+    # "cola",  # not binary accuracy
     "mrpc", "rte", "sst2", "mnli", "qnli",
-    # "qqp", # this dataset always throws an error when loading
+    # "qqp",   # this dataset always throws an error when loading
 ]
 openllm_datasets = [
     "ifeval",
     "openllm_math",
     "mmlu_pro", "arc_challenge",
-    "bbh", "gpqa", "musr"
+    "bbh", "gpqa", "musr",
 ]
 all_datasets = helm_datasets + glue_datasets + openllm_datasets + ["imagenet"]
 
 
 def get_scores(dataset_name):
+    """Return a binary (M models × N items) score matrix for ``dataset_name``.
+
+    Caches to ``data/scores/<dataset_name>.jbl`` on first call and re-uses the
+    cache thereafter.  Drops models with all-zero score rows.
+    """
     dir_scores = os.path.join(dir_data_base, "scores")
     os.makedirs(dir_scores, exist_ok=True)
     path_scores = os.path.join(dir_scores, "%s.jbl" % dataset_name)
@@ -67,7 +80,11 @@ def get_scores(dataset_name):
                 scores[m] = (all_preds[m].argmax(-1) == gold_labels)
 
         else:
-            raise NotImplementedError
+            raise NotImplementedError(
+                f"Dataset {dataset_name!r} is not supported by this minimal "
+                "repo.  Add it to helm_datasets / glue_datasets / "
+                "openllm_datasets if you have a score file for it."
+            )
 
         jbl.dump(scores, path_scores)
 
@@ -77,10 +94,10 @@ def get_scores(dataset_name):
 
     scores = scores.astype(np.float32)
 
-    assert len(np.unique(scores)) == 2
-    # if len(np.unique(scores)) != 2:
-    #     print(f"Warning: scores of {dataset_name} are not binary, convert to binary.")
-    #     scores = (scores > np.mean(scores)).astype(np.float32)
+    assert len(np.unique(scores)) == 2, (
+        f"Expected binary scores for {dataset_name!r}, got "
+        f"{len(np.unique(scores))} unique values."
+    )
 
     real_acc = scores.mean(-1)
     scores = scores[real_acc > 1e-8]
@@ -108,7 +125,7 @@ def load_glue_predictions(task="cola", model_family=None):
         assert f in all_model_family
         pred_f = np.load(
             os.path.join(dir_data_raw, "model_preds_by_family_glue", f, "%s_preds.npy" % task),
-            allow_pickle=True
+            allow_pickle=True,
         )
         all_pred.append(pred_f)
     all_pred = np.concatenate(all_pred, axis=0)
@@ -417,8 +434,8 @@ class HelmLite(Benchmark):
             if not os.path.exists(path_save):
                 for version in range(20):
                     url = (
-                            "https://storage.googleapis.com/crfm-helm-public/lite/benchmark_output/runs/v1.%d.0/%s/%s"
-                            % (version, file_name, json_name)
+                        "https://storage.googleapis.com/crfm-helm-public/lite/benchmark_output/runs/v1.%d.0/%s/%s"
+                        % (version, file_name, json_name)
                     )
                     if download_json(url, path_save):
                         break
@@ -428,12 +445,12 @@ class HelmLite(Benchmark):
                 if not os.path.exists(path_save):
                     for version in range(20):
                         url = (
-                                "https://storage.googleapis.com/crfm-helm-public/lite/benchmark_output/runs/v1.%d.0/%s/%s"
-                                % (
-                                    version,
-                                    subtask + "model=%s,stop=none" % model_name,
-                                    json_name,
-                                )
+                            "https://storage.googleapis.com/crfm-helm-public/lite/benchmark_output/runs/v1.%d.0/%s/%s"
+                            % (
+                                version,
+                                subtask + "model=%s,stop=none" % model_name,
+                                json_name,
+                            )
                         )
                         if download_json(url, path_save):
                             break
@@ -457,14 +474,7 @@ class HelmLite(Benchmark):
                     res[i]["id"] = "%s-%s" % (subtask, res[i]["id"])
                 metric_name = task2metric[task_name]
                 if "stats" in res[i].keys() and metric_name in res[i]["stats"]:
-                    res[i]["stats"]["acc"] = (
-                            1.0
-                            * res[i]["stats"][metric_name]
-                        # without following lines, acc will be different from the original aggregated score
-                        # * n
-                        # / len(res)
-                        # / len(subtasks)
-                    )
+                    res[i]["stats"]["acc"] = 1.0 * res[i]["stats"][metric_name]
             ret += res
         return ret
 
@@ -528,7 +538,7 @@ class OpenLLM(Benchmark):
                 "arc_challenge",
                 "bbh",
                 "gpqa",
-                "musr"
+                "musr",
             ]
         else:
             self.tasks = tasks
@@ -547,11 +557,11 @@ class OpenLLM(Benchmark):
         task2subtasks = {
             "ifeval": ["ifeval"],
             "openllm_math": [
-                'math_geometry_hard',
-                'math_intermediate_algebra_hard',
-                'math_num_theory_hard',
-                'math_prealgebra_hard',
-                'math_precalculus_hard'
+                "math_geometry_hard",
+                "math_intermediate_algebra_hard",
+                "math_num_theory_hard",
+                "math_prealgebra_hard",
+                "math_precalculus_hard",
             ],
             "mmlu_pro": ["mmlu_pro"],
             "arc_challenge": ["arc_challenge"],
@@ -579,15 +589,18 @@ class OpenLLM(Benchmark):
                 "bbh_tracking_shuffled_objects_five_objects",
                 "bbh_tracking_shuffled_objects_seven_objects",
                 "bbh_tracking_shuffled_objects_three_objects",
-                "bbh_web_of_lies"],
+                "bbh_web_of_lies",
+            ],
             "gpqa": [
                 "gpqa_diamond",
                 "gpqa_extended",
-                "gpqa_main"],
+                "gpqa_main",
+            ],
             "musr": [
                 "musr_murder_mysteries",
                 "musr_object_placements",
-                "musr_team_allocation", ]
+                "musr_team_allocation",
+            ],
         }
         model_name = model_name.replace("/", "__")
         ret = {
@@ -605,7 +618,6 @@ class OpenLLM(Benchmark):
             ret["id"] += ["%s-%d" % (subtask, i) for i in data["doc_id"]]
             ret["label"] += data["target"]
             ret["acc"] += data[task2metric[task_name]]
-            # todo: text is not loaded
             ret["text"] += ["" for _ in data["doc"]]
 
         ret = pd.DataFrame(ret)

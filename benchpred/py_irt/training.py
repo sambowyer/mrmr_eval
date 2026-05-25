@@ -23,30 +23,24 @@
 from typing import Optional, Union, Dict
 from pathlib import Path
 
-import typer
 import torch
 
 from pyro.infer import SVI, Trace_ELBO
 import pyro
 # from pyro.optim import ExponentialLR
 
-from rich.console import Console
-from rich.live import Live
-from rich.table import Table
+from tqdm import tqdm
 
 from sklearn.feature_extraction.text import CountVectorizer
 
 # These imports are necessary to have @register run
 # pylint: disable=unused-import
-from .models import abstract_model, multidim_2pl
+from .models import abstract_model, multidim_2pl, beta_2pl_nd, beta_cubed, beta_cubed_v2, lego_cm, gaussian_irt
 from .io import safe_file, write_json
 from .dataset import Dataset
 from .initializers import INITIALIZERS, IrtInitializer
 from .config import IrtConfig
 from .models.abstract_model import IrtModel
-
-training_app = typer.Typer()
-console = Console()
 
 
 class IrtModelTrainer:
@@ -77,7 +71,6 @@ class IrtModelTrainer:
 
         if self.amortized:
             self._config.vocab_size = len(self._dataset.observation_items[0])
-        console.log(f'Vocab size: {self._config.vocab_size}')
 
         # filter out test data
         training_idx = [
@@ -121,7 +114,6 @@ class IrtModelTrainer:
             "num_items": len(self._dataset.ix_to_item_id),
             "num_subjects": len(self._dataset.ix_to_subject_id),
         }
-        console.log(f'args: {args}')
         # TODO: Find a better solution to this
         if self._config.priors is not None:
             args["priors"] = self._config.priors
@@ -134,7 +126,6 @@ class IrtModelTrainer:
         args["hidden"] = self._config.hidden
         args["vocab_size"] = self._config.vocab_size
 
-        console.log(f"Parsed Model Args: {args}")
         self.irt_model = IrtModel.from_name(model_type)(**args)
         pyro.clear_param_store()
         self._pyro_model = self.irt_model.get_model()
@@ -159,30 +150,20 @@ class IrtModelTrainer:
         for init in self._initializers:
             init.initialize()
 
-        table = Table()
-        table.add_column("Epoch")
-        table.add_column("Loss")
-        table.add_column("Best Loss")
-        table.add_column("New LR")
         loss = float("inf")
         best_loss = loss
         current_lr = self._config.lr
-        with Live(table) as live:
-            live.console.print(f"Training Pyro IRT Model for {epochs} epochs")
-            for epoch in range(epochs):
-                loss = svi.step(subjects, items, responses)
-                if loss < best_loss:
-                    best_loss = loss
-                    self.best_params = self.export(items)
-                scheduler.step()
-                current_lr = current_lr * self._config.lr_decay
-                if epoch % self._config.log_every == 0:
-                    table.add_row(
-                        f"{epoch + 1}", "%.4f" % loss, "%.4f" % best_loss, "%.4f" % current_lr
-                    )
-
-            table.add_row(f"{epoch + 1}", "%.4f" % loss, "%.4f" % best_loss, "%.4f" % current_lr)
-            self.last_params = self.export(items)
+        pbar = tqdm(range(epochs), desc="Fitting IRT")
+        for epoch in pbar:
+            loss = svi.step(subjects, items, responses)
+            if loss < best_loss:
+                best_loss = loss
+                self.best_params = self.export(items)
+            scheduler.step()
+            current_lr = current_lr * self._config.lr_decay
+            if epoch % self._config.log_every == 0:
+                pbar.set_postfix_str(f"loss={loss:.4f} best={best_loss:.4f}")
+        self.last_params = self.export(items)
 
     def export(self, items):
         if self.amortized:

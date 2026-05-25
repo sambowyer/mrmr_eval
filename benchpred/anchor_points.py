@@ -9,7 +9,27 @@ import joblib as jbl
 from numpy.linalg import lstsq
 from tqdm import tqdm
 
-from .base import BenchPred, set_random_seed
+from .base import BenchPred, set_random_seed, _WeightedSumPredictor
+
+
+class _AnchorPredPredictor:
+    def __init__(self, M, B, nearest):
+        self.M = M
+        self.B = B
+        self.nearest = nearest
+
+    def predict(self, X):
+        X = np.asarray(X)
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        ret = []
+        for anchors in X:
+            preds = np.sum(
+                (self.M * anchors[np.newaxis, :] + self.B) * self.nearest,
+                axis=1,
+            )
+            ret.append(preds.mean())
+        return np.array(ret)
 
 
 class AnchorPointsWeightedPred(BenchPred):
@@ -63,6 +83,9 @@ class AnchorPointsWeightedPred(BenchPred):
             target_coreset_scores = target_coreset_scores.reshape(1, -1)
 
         return (target_coreset_scores * self.weights).sum(1)
+
+    def refit_regressor(self, source_full_scores):
+        return _WeightedSumPredictor(self.weights)
 
     def save(self, path_save):
         jbl.dump((self.compressed_data_indices, self.weights), path_save)
@@ -150,6 +173,32 @@ class AnchorPointPredictorPred(BenchPred):
         for anchor in target_coreset_scores:
             ret.append(self.predict_single(anchor).squeeze().mean())
         return np.array(ret)
+
+    def refit_regressor(self, source_full_scores):
+        coreset = self.get_coreset()
+        num_data = source_full_scores.shape[1]
+        floaters = np.array(
+            [i for i in range(num_data) if i not in coreset]
+        )
+        cs = len(coreset)
+        nf = len(floaters)
+        M = np.zeros((nf, cs))
+        B = np.zeros((nf, cs))
+        nearest = np.zeros((nf, cs))
+        resid = np.zeros((nf, cs))
+        for j, anchor in enumerate(coreset):
+            apoints = source_full_scores[:, anchor]
+            A_mat = np.vstack([apoints, np.ones(len(apoints))]).T
+            for i, floater in enumerate(floaters):
+                fpoints = source_full_scores[:, floater]
+                theta = lstsq(A_mat, fpoints, rcond=None)[0]
+                M[i, j] = theta[0]
+                B[i, j] = theta[1]
+                resid[i, j] = ((A_mat @ theta - fpoints) ** 2).sum()
+        mins = np.argmin(resid, axis=1)
+        for i, mn in enumerate(mins):
+            nearest[i, mn] = 1
+        return _AnchorPredPredictor(M, B, nearest)
 
     def save(self, path_save):
         jbl.dump(

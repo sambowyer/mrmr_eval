@@ -30,13 +30,13 @@ sign on each is flipped. Initializing difficulty helps push towards the intuitiv
 solution.
 """
 import abc
+import logging
 import torch
 import pyro
-from rich.console import Console
 from .dataset import Dataset, ItemAccuracy
 
 
-console = Console()
+_log = logging.getLogger(__name__)
 INITIALIZERS = {}
 
 
@@ -83,14 +83,14 @@ class DifficultySignInitializer(IrtInitializer):
         diff = pyro.param("loc_diff")
         for item_ix, accuracy in sorted_item_accuracies[: self._n_to_init]:
             item_id = self._dataset.ix_to_item_id[item_ix]
-            console.log(f"Low Accuracy: {accuracy}, ix={item_ix} id={item_id}")
+            _log.debug("Low Accuracy: %s, ix=%s id=%s", accuracy, item_ix, item_id)
             diff.data[item_ix] = torch.tensor(
                 self._magnitude, dtype=diff.data.dtype, device=diff.data.device
             )
 
         for item_ix, accuracy in sorted_item_accuracies[-self._n_to_init :]:
             item_id = self._dataset.ix_to_item_id[item_ix]
-            console.log(f"High Accuracy: {accuracy}, ix={item_ix} id={item_id}")
+            _log.debug("High Accuracy: %s, ix=%s id=%s", accuracy, item_ix, item_id)
             diff.data[item_ix] = torch.tensor(
                 -self._magnitude, dtype=diff.data.dtype, device=diff.data.device
             )

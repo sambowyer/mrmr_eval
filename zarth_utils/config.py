@@ -10,10 +10,8 @@ from .logger import logging_info
 
 try:
     import wandb
-except ModuleNotFoundError as err:
-    logging.warning("WandB not installed!")
-except TypeError as err:
-    logging.warning("WandB not properly installed!")
+except (ModuleNotFoundError, TypeError):
+    wandb = None  # Optional dependency; only used when use_wandb=True.
 
 dir_configs = os.path.join(os.getcwd(), "configs")
 

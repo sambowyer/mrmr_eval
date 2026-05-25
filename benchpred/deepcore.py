@@ -7,7 +7,7 @@ import torch
 import numpy as np
 import joblib as jbl
 
-from .base import BenchPred, set_random_seed
+from .base import BenchPred, _MeanPredictor, set_random_seed
 
 
 class KCenterGreedyPred(BenchPred):
@@ -95,6 +95,9 @@ class KCenterGreedyPred(BenchPred):
             target_coreset_scores = target_coreset_scores.reshape(1, -1)
 
         return target_coreset_scores.mean(1)
+
+    def refit_regressor(self, source_full_scores):
+        return _MeanPredictor()
 
     def get_coreset(self):
         return self.compressed_data_indices

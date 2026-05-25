@@ -25,10 +25,6 @@ from pathlib import Path
 from pydantic import BaseModel
 from .io import read_jsonlines
 from sklearn.feature_extraction.text import CountVectorizer
-from ordered_set import OrderedSet
-from rich.console import Console
-
-console = Console()
 
 class ItemAccuracy(BaseModel):
     correct: int = 0
@@ -40,8 +36,8 @@ class ItemAccuracy(BaseModel):
 
 
 class Dataset(BaseModel):
-    item_ids: Union[Set[str], OrderedSet]
-    subject_ids: Union[Set[str], OrderedSet]
+    item_ids: Union[Set[str], dict]
+    subject_ids: Union[Set[str], dict]
     item_id_to_ix: Dict[str, int]
     ix_to_item_id: Dict[int, str]
     subject_id_to_ix: Dict[str, int]
@@ -78,8 +74,8 @@ class Dataset(BaseModel):
         {"subject_id": "<subject_id>", "responses": {"<item_id>": <response>}}
         * Where <subject_id> is a string, <item_id> is a string, and <response> is a number (usually integer)
         """
-        item_ids = OrderedSet()
-        subject_ids = OrderedSet()
+        item_ids: dict = {}
+        subject_ids: dict = {}
         item_id_to_ix = {}
         ix_to_item_id = {}
         subject_id_to_ix = {}
@@ -87,10 +83,10 @@ class Dataset(BaseModel):
         input_data = read_jsonlines(data_path)
         for line in input_data:
             subject_id = line["subject_id"]
-            subject_ids.add(subject_id)
+            subject_ids[subject_id] = None
             responses = line["responses"]
             for item_id in responses.keys():
-                item_ids.add(item_id)
+                item_ids[item_id] = None
 
         for idx, item_id in enumerate(item_ids):
             item_id_to_ix[item_id] = idx
@@ -109,7 +105,6 @@ class Dataset(BaseModel):
         observation_items = []
         observations = []
         training_example = []
-        console.log(f'amortized: {amortized}')
         for idx, line in enumerate(input_data):
             subject_id = line["subject_id"]
             for item_id, response in line["responses"].items():

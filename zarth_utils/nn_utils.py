@@ -1,5 +1,6 @@
 import os
 import random
+import warnings
 from collections import defaultdict
 
 import numpy as np
@@ -10,13 +11,21 @@ from .logger import logging_info
 
 try:
     import tensorflow as tf
-except ModuleNotFoundError as err:
-    logging.warning("Tensorflow not installed!")
+except ModuleNotFoundError:
+    tf = None  # Optional dependency; only used by set_random_seed when present.
 
 try:
     import torch
-except ModuleNotFoundError as err:
-    logging.warning("Pytorch not installed!")
+except ModuleNotFoundError:
+    torch = None  # Optional dependency; only used by set_random_seed when present.
+
+if torch is not None:
+    warnings.filterwarnings(
+        "ignore",
+        message=".*CUDA initialization.*",
+        category=UserWarning,
+        module=r"torch\.cuda",
+    )
 
 try:
     from sklearn.metrics import (

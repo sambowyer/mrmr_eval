@@ -19,10 +19,8 @@ from .logger import logging_info
 
 try:
     import wandb
-except ModuleNotFoundError as err:
-    logging.warning("WandB not installed!")
-except TypeError as err:
-    logging.warning("WandB not properly installed!")
+except (ModuleNotFoundError, TypeError):
+    wandb = None  # Optional dependency; only used when use_wandb=True.
 
 
 class Recorder:
@@ -74,11 +72,17 @@ class Recorder:
                 self.path_requirement,
                 self.path_requirement + ".mv.%s" % get_random_time_stamp(),
             )
+        # Best-effort: snapshot the conda environment into the record dir.
+        # Skip silently when conda isn't installed (e.g. uv-managed venv).
         dir_conda = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.dirname(sys.executable)))
         )
         path_conda = os.path.join(dir_conda, "condabin", "conda")
-        os.system("%s env export --file %s" % (path_conda, self.path_requirement))
+        if os.path.isfile(path_conda) and os.access(path_conda, os.X_OK):
+            os.system(
+                "%s env export --file %s 2>/dev/null"
+                % (path_conda, self.path_requirement)
+            )
 
     def write_record(self, line):
         """

@@ -7,48 +7,47 @@ name = "benchpred"
 authors = [
     {name = "Guanhua Zhang"},
 ]
-description = "Tools for benchmark prediction with fewer data."
+description = "Minimal benchmark-prediction toolkit centred on mRMR coreset selection."
 version = "1.0.0"
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 readme = "README.md"
 license = {text = "MIT"}
-classifiers=[
-    "Development Status :: 3 - Alpha",
+classifiers = [
+    "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Natural Language :: English",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "py-irt==0.4.10",
-    "torch",
-    "kmedoids",
+    "numpy<2",
+    "scipy",
+    "scikit-learn",
+    "pandas",
+    "matplotlib",
+    "joblib",
+    "tqdm",
     "datasets",
+    "requests",
+    "torch",
     "pyro-ppl",
     "pyyaml",
-    "matplotlib",
-    "tqdm",
-    "pandas",
-    "numpy==1.26.4",
-    "joblib",
+    "pydantic",
+    "kmedoids",
+    "pygam",
     "gitpython",
     "ipython",
-    "wandb",
-    "scikit-learn",
-    "ordered_set",
-    "rich"
+    "ipykernel>=6.29.5",
+    "jupyterlab",
+    "nbconvert",
 ]
-
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["benchpred*"]
+include = ["benchpred*", "zarth_utils*"]
