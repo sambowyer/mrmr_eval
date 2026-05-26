@@ -1,6 +1,6 @@
 # mrmr_eval — minimal benchmark prediction with mRMR
 
-A small, self-contained repo for **benchmark prediction** experiments: given an LLM-evaluation score matrix (models × questions), select a small *coreset* of questions and use that coreset to predict each model's accuracy on the full benchmark. The headline method is **mRMR** (Minimum Redundancy Maximum Relevance) coupled with Ridge / polynomial Kernel-Ridge regression as detailed in our paper: [Efficient Benchmarking Is Just Feature Selection and Multiple Regression](LINK_TO_PAPER). A handful of baselines (IRT, anchor points, random sampling/search, Lasso) are bundled for comparison and we also include the option to refit the base methods with a Ridge or Kernel Ridge regressor on top of pre-computed coresets.
+A small, self-contained repo for **benchmark prediction** experiments: given an LLM-evaluation score matrix (models × questions), select a small *coreset* of questions and use that coreset to predict each model's accuracy on the full benchmark. The headline method is **mRMR** (Minimum Redundancy Maximum Relevance) coupled with Ridge / polynomial Kernel-Ridge regression as detailed in our paper: [Efficient Benchmarking Is Just Feature Selection and Multiple Regression](https://arxiv.org/abs/2605.25773). A handful of baselines (IRT, anchor points, random sampling/search, Lasso) are bundled for comparison and we also include the option to refit the base methods with a Ridge or Kernel Ridge regressor on top of pre-computed coresets.
 
 The notebook [`tutorial.ipynb`](tutorial.ipynb) runs the full pipeline on one OpenLLM dataset and reproduces a 1×4 (or 2×4) combined-metric grid styled after the paper figures.
 
@@ -141,7 +141,13 @@ This repository is licensed under the MIT License - see the [LICENSE.txt](LICENS
 If you use this repository in your work, please cite the accompanying paper:
 
 ```bibtex
-@article{
-   ...
+@article{bowyer2026efficientbenchmarkingjustfeature,
+      title={Efficient Benchmarking Is Just Feature Selection and Multiple Regression}, 
+      author={Sam Bowyer and Acyr Locatelli and Kris Cao},
+      year={2026},
+      eprint={2605.25773},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML},
+      url={https://arxiv.org/abs/2605.25773}, 
 }
 ```
